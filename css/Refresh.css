@@ -1,0 +1,51 @@
+/* refresh.css */
+
+html, body {
+    margin: 0px;
+    padding: 0px;
+    height: 100%;
+    font-family: Tahoma, serif;
+    font-size: 1em;
+}
+
+
+#mymap {
+    width: 100%;
+    height: 100%;
+}
+
+img.huechange0 { 
+    filter: hue-rotate(0deg); 
+
+}
+img.huechange1 { 
+    filter: hue-rotate(60deg); 
+
+}
+img.huechange2 { 
+    filter: hue-rotate(120deg); 
+
+}
+img.huechange3 { 
+    filter: hue-rotate(180deg); 
+
+}
+img.huechange4 { 
+    filter: hue-rotate(240deg); 
+
+}
+img.huechangeSELECTED { 
+    filter: hue-rotate(158deg); 
+
+}
+
+.fullscreen-icon { background-image: url(icon-fullscreen.svg); background-size:26px 52px; }
+.fullscreen-icon.leaflet-fullscreen-on { background-position:0 -26px; }
+.leaflet-touch .fullscreen-icon { background-position: 2px 2px; }
+.leaflet-touch .fullscreen-icon.leaflet-fullscreen-on { background-position: 2px -24px; }
+/* one selector per rule as explained here : http://www.sitepoint.com/html5-full-screen-api/ */
+.leaflet-container:-webkit-full-screen { width: 100% !important; height: 100% !important; z-index: 99999; }
+.leaflet-container:-ms-fullscreen { width: 100% !important; height: 100% !important; z-index: 99999; }
+.leaflet-container:full-screen { width: 100% !important; height: 100% !important; z-index: 99999; }
+.leaflet-container:fullscreen { width: 100% !important; height: 100% !important; z-index: 99999; }
+.leaflet-pseudo-fullscreen { position: fixed !important; width: 100% !important; height: 100% !important; top: 0px !important; left: 0px !important; z-index: 99999; }

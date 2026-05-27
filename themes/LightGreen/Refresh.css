@@ -1,0 +1,15 @@
+/* refresh.css */
+
+html, body {
+    margin: 0px;
+    padding: 0px;
+    height: 100%;
+    font-family: Tahoma, serif;
+    font-size: 1em;
+}
+
+
+#mymap {
+    width: 100%;
+    height: 100%;
+}

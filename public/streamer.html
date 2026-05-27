@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC - Streamer Caméra</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; text-align: center; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 12px; }
+        video { width: 100%; max-width: 480px; background: #000; border-radius: 8px; margin-top: 15px; transform: scaleX(-1); }
+        button { padding: 12px 24px; font-size: 14px; font-weight: bold; margin: 5px; cursor: pointer; border: none; border-radius: 6px; }
+        #camBtn { background-color: #2196F3; color: white; }
+        #streamBtn { background-color: #4CAF50; color: white; }
+        #stopBtn { background-color: #f44336; color: white; }
+        button:disabled { background-color: #555 !important; color: #888; cursor: not-allowed; }
+        #logConsole { background: #000; color: #00FF00; font-family: 'Courier New', Courier, monospace; text-align: left; padding: 10px; height: 120px; overflow-y: scroll; border-radius: 6px; font-size: 12px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Flux Caméra Téléphone</h1>
+    <div class="btn-group">
+        <button id="camBtn">1. Activer Caméra</button>
+        <button id="streamBtn" disabled>2. Lancer le Stream</button>
+        <button id="stopBtn" disabled>3. Arrêter</button>
+    </div>
+    <video id="localVideo" autoplay playsinline muted></video>
+    <div id="logConsole"></div>
+</div>
+
+<script>
+    const serverIp = '192.168.1.107'; 
+    
+    const camBtn = document.getElementById('camBtn');
+    const streamBtn = document.getElementById('streamBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const logConsole = document.getElementById('logConsole');
+    const localVideo = document.getElementById('localVideo');
+
+    let localStream = null;
+    let ws = null;
+    let peerConnection = null;
+    let currentFacingMode = 'user'; // 'user' = front, 'environment' = back
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    function log(message) {
+        logConsole.innerHTML += `[${new Date().toLocaleTimeString()}] ${message}<br>`;
+        logConsole.scrollTop = logConsole.scrollHeight;
+    }
+
+    // ── SWITCH CAMERA - Android WebView Compatible ──
+    // Android ne peut pas ouvrir 2 cameras en meme temps.
+    // Il faut ARRETER l'ancienne AVANT d'ouvrir la nouvelle.
+    async function switchCamera(facingMode) {
+        function feedback(msg) {
+            log(msg);
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'debug-feedback', message: `[${streamerDeviceId}] ${msg}` }));
+            }
+        }
+
+        if (facingMode === currentFacingMode && localStream) {
+            feedback(`Deja sur camera ${facingMode}`);
+            return;
+        }
+
+        feedback(`Switch camera -> ${facingMode}...`);
+
+        // ETAPE 1 : ARRETER l'ancienne camera pour liberer le hardware
+        if (localStream) {
+            localStream.getVideoTracks().forEach(t => {
+                t.stop();
+                feedback(`Ancien track video arrete: ${t.label}`);
+            });
+            // On garde l'audio pour le moment
+        }
+
+        // Petit delai pour laisser Android liberer le hardware camera
+        await new Promise(r => setTimeout(r, 300));
+
+        // ETAPE 2 : Ouvrir la nouvelle camera
+        let newStream = null;
+
+        // Methode 1 : facingMode exact
+        try {
+            newStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: facingMode }, width: { ideal: 640 }, height: { ideal: 480 } },
+                audio: true
+            });
+            feedback('OK via facingMode exact.');
+        } catch (e1) {
+            feedback(`facingMode exact echoue: ${e1.message}`);
+
+            // Methode 2 : enumeration par deviceId
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                feedback(`${cameras.length} cameras: ${cameras.map(c => c.label || c.deviceId).join(', ')}`);
+
+                let targetDevId = null;
+
+                for (const cam of cameras) {
+                    const lbl = (cam.label || '').toLowerCase();
+                    if (facingMode === 'environment' && (lbl.includes('back') || lbl.includes('rear'))) {
+                        targetDevId = cam.deviceId; break;
+                    }
+                    if (facingMode === 'user' && (lbl.includes('front') || lbl.includes('face'))) {
+                        targetDevId = cam.deviceId; break;
+                    }
+                }
+
+                // Fallback : prendre la camera 0 pour back, camera 1 pour front (convention Android)
+                if (!targetDevId && cameras.length >= 2) {
+                    targetDevId = facingMode === 'environment' ? cameras[0].deviceId : cameras[1].deviceId;
+                    feedback(`Fallback index: ${facingMode === 'environment' ? 'cam[0]' : 'cam[1]'}`);
+                }
+
+                if (targetDevId) {
+                    newStream = await navigator.mediaDevices.getUserMedia({
+                        video: { deviceId: { exact: targetDevId }, width: { ideal: 640 }, height: { ideal: 480 } },
+                        audio: true
+                    });
+                    feedback('OK via deviceId.');
+                }
+            } catch (e2) {
+                feedback(`ECHEC enumeration: ${e2.message}`);
+            }
+        }
+
+        if (!newStream) {
+            feedback('ECHEC total. Reouverture ancienne camera...');
+            // Reouvrir l'ancienne camera pour ne pas rester sans video
+            try {
+                newStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { exact: currentFacingMode }, width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: true
+                });
+                feedback('Ancienne camera restauree.');
+            } catch(e) {
+                feedback(`Impossible de restaurer: ${e.message}`);
+                return;
+            }
+        }
+
+        // ETAPE 3 : Remplacer les tracks dans le peerConnection
+        try {
+            if (peerConnection) {
+                const senders = peerConnection.getSenders();
+                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+                const newVideoTrack = newStream.getVideoTracks()[0];
+                const newAudioTrack = newStream.getAudioTracks()[0];
+
+                if (videoSender && newVideoTrack) {
+                    await videoSender.replaceTrack(newVideoTrack);
+                    feedback('replaceTrack video OK.');
+                }
+                if (audioSender && newAudioTrack) {
+                    await audioSender.replaceTrack(newAudioTrack);
+                }
+            }
+
+            // Arreter les anciens tracks audio restants
+            if (localStream) {
+                localStream.getAudioTracks().forEach(t => t.stop());
+            }
+
+            localStream = newStream;
+            localVideo.srcObject = localStream;
+            currentFacingMode = facingMode;
+            feedback(`Camera ${facingMode} ACTIVE.`);
+        } catch (err) {
+            feedback(`ECHEC replaceTrack: ${err.message}`);
+        }
+    }
+
+    camBtn.onclick = async () => {
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, 
+                audio: true 
+            });
+            localVideo.srcObject = localStream;
+            log("Caméra prête.");
+            camBtn.disabled = true;
+            streamBtn.disabled = false;
+            stopBtn.disabled = false;
+        } catch (err) {
+            log(`Erreur caméra: ${err.message}`);
+        }
+    };
+
+    // Recuperer le deviceId depuis l'URL (?deviceid=18)
+    const urlParams2 = new URLSearchParams(window.location.search);
+    const streamerDeviceId = urlParams2.get('deviceid') || '';
+
+    streamBtn.onclick = async () => {
+        log("Connexion signalement...");
+        ws = new WebSocket(`wss://${serverIp}:8443`);
+
+        ws.onopen = async () => {
+            log("Connecte. Initialisation WebRTC...");
+            ws.send(JSON.stringify({ type: 'register-streamer', deviceId: streamerDeviceId }));
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: 'candidate', candidate: event.candidate }));
+                }
+            };
+
+            peerConnection.onconnectionstatechange = () => {
+                log(`Statut WebRTC: ${peerConnection.connectionState}`);
+            };
+
+            // C'est le téléphone qui prépare l'offre pour le Viewer
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            ws.send(JSON.stringify({ type: 'offer', offer: offer }));
+            log("Offre vidéo envoyée à la régie.");
+            streamBtn.disabled = true;
+        };
+
+        ws.onmessage = async (message) => {
+            const data = JSON.parse(message.data);
+
+            if (data.type === 'answer') {
+                log("Reponse de la regie recue. Connexion en cours...");
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            } 
+            else if (data.type === 'candidate') {
+                await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            }
+            else if (data.type === 'command') {
+                // Commandes envoyees depuis le viewer via le serveur
+                const cmd = data.command;
+                log(`Commande recue: ${cmd}`);
+                if (cmd === 'STREAMBACK') {
+                    switchCamera('environment');
+                } else if (cmd === 'STREAMFRONT') {
+                    switchCamera('user');
+                }
+            }
+        };
+    };
+
+    stopBtn.onclick = () => {
+        if (peerConnection) peerConnection.close();
+        if (ws) ws.close();
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        localVideo.srcObject = null;
+        camBtn.disabled = false;
+        streamBtn.disabled = true;
+        stopBtn.disabled = true;
+        log("Stream arrêté.");
+    };
+// --- SYSTÈME D'AUTO-DÉCLENCHEMENT SANS INTERACTION MANUELLE ---
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Si l'URL contient bien "auto=true" envoyé par le téléphone
+    if (urlParams.get('auto') === 'true') {
+        console.log("Démarrage automatique détecté. Initialisation du flux matériel...");
+        
+        // 1. On simule immédiatement l'activation de la caméra
+        if (camBtn && !camBtn.disabled) {
+            camBtn.click();
+            
+            // 2. On attend une seconde que le flux matériel soit prêt, puis on lance le stream
+            setTimeout(() => {
+                if (streamBtn && !streamBtn.disabled) {
+                    console.log("Lancement automatique de la diffusion WebRTC.");
+                    streamBtn.click();
+                }
+            }, 1200); // Délai de sécurité pour laisser la caméra s'ouvrir en tâche de fond
+        }
+    }
+});
+</script>
+</body>
+</html>

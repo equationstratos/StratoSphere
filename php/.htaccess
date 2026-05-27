@@ -1,0 +1,4 @@
+# Deny direct access to utility/internal PHP files
+<FilesMatch "^(config|db|auth_middleware|dbconnect|developersTable)\.php$">
+    Require all denied
+</FilesMatch>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STRATOSPHERE - Login</title>
+    <link rel="icon" type="image/x-icon" href="images/space.ico">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg:     #0d1117;
+            --panel:  #161b22;
+            --border: #30363d;
+            --accent: #3498db;
+            --text:   #c9d1d9;
+            --muted:  #6e7681;
+            --danger: #f85149;
+        }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+        .brand {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: 4px;
+            margin-bottom: 32px;
+            color: #fff;
+        }
+        .brand span { color: var(--accent); }
+        .card {
+            width: 100%;
+            max-width: 380px;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+        }
+        .card h2 { font-size: 20px; font-weight: 600; margin-bottom: 24px; text-align: center; color: #fff; }
+        .field { margin-bottom: 16px; }
+        .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+        .field input {
+            width: 100%;
+            padding: 10px 14px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 15px;
+            transition: border-color .2s;
+            outline: none;
+        }
+        .field input:focus { border-color: var(--accent); }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity .2s;
+        }
+        .btn:hover { opacity: .85; }
+        .alert {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .alert.error { background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3); color: var(--danger); }
+        .alert.warn  { background: rgba(243,156,18,.1); border: 1px solid rgba(243,156,18,.3); color: #f39c12; }
+        footer { margin-top: 24px; font-size: 12px; color: var(--muted); }
+    </style>
+</head>
+<body>
+
+<div class="brand">STRATO<span>SPHERE</span></div>
+
+<div class="card">
+    <h2>Sign in</h2>
+
+    <?php
+    // Show error messages
+    $err = $_GET['error'] ?? '';
+    if ($err === 'invalid') echo '<div class="alert error">Incorrect username or password.</div>';
+    elseif ($err === 'locked') echo '<div class="alert warn">Too many attempts. Try again in 15 minutes.</div>';
+    elseif ($err === 'empty') echo '<div class="alert error">Please fill in both fields.</div>';
+    ?>
+
+    <form action="php/authenticate.php" method="post" autocomplete="on">
+        <div class="field">
+            <label for="username">Username</label>
+            <input type="text" name="username" id="username" placeholder="Username" required autocomplete="username">
+        </div>
+        <div class="field">
+            <label for="password">Password</label>
+            <input type="password" name="password" id="password" placeholder="Password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn">Login</button>
+    </form>
+</div>
+
+<footer>STRATOSPHERE Control Panel &copy; 2026</footer>
+
+</body>
+</html>

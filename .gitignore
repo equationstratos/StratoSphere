@@ -1,0 +1,23 @@
+# Environment config (never commit secrets)
+.env
+
+# Logs
+*.log
+php_errors.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build output
+*.apk
+
+# Temp
+*.tmp
+*.bak

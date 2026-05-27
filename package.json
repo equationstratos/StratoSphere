@@ -1,0 +1,19 @@
+{
+  "name": "stratosphere",
+  "version": "1.0.0",
+  "description": "Système de contrôle à distance d'appareils Android via un tableau de bord web.",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "selfsigned": "^2.4.1",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {}
+}

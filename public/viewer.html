@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>WebRTC - Régie Multi-Caméras Avancée</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: #e0e0e0; text-align: center; margin: 0; padding: 5px; overflow-x: hidden; }
+        .container { max-width: 100%; margin: 0 auto; background: #1e1e1e; padding: 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        
+        .grid-container { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 8px; 
+            margin-top: 5px; 
+            background: #000; 
+            padding: 8px; 
+            border-radius: 6px; 
+        }
+        
+        .video-box {
+            background: #222; 
+            border-radius: 6px; 
+            overflow: hidden; 
+            border: 2px solid #444; 
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: auto; 
+            position: relative;
+        }
+
+        .video-container-wrapper {
+            position: relative;
+            flex-grow: 1;
+            height: 220px;
+            overflow: hidden;
+            background: #000;
+        }
+
+        video { 
+           width: 100%; 
+           height: 100%;     
+           object-fit: cover; 
+           background: #000; 
+           transition: filter 0.3s ease;
+        }    
+
+        .video-label {
+            font-size: 11px;
+            padding: 4px 6px;
+            background: #1a2332;
+            color: #fff;
+            font-weight: bold;
+            text-align: left;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .video-label span { color: #3498db; }
+
+        .video-actions {
+            background: #161616;
+            padding: 4px;
+            display: flex;
+            justify-content: space-around;
+            border-top: 1px solid #333;
+            gap: 2px;
+        }
+
+        .action-btn {
+            background: #252525;
+            border: 1px solid #444;
+            color: #eee;
+            padding: 2px 4px;
+            font-size: 9px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-grow: 1;
+        }
+        .action-btn:hover { background: #3498db; color: #fff; border-color: #3498db; }
+        .action-btn.active { background: #e74c3c; border-color: #e74c3c; color: #fff; }
+
+        .video-controls {
+            background: #0d0d0d;
+            padding: 3px 4px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid #222;
+            gap: 3px;
+        }
+        .ctrl-btn {
+            background: none;
+            border: 1px solid transparent;
+            color: #aaa;
+            font-size: 13px;
+            cursor: pointer;
+            padding: 2px 5px;
+            border-radius: 3px;
+            transition: all 0.15s;
+            line-height: 1;
+        }
+        .ctrl-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+        .ctrl-btn.active { color: #e74c3c; }
+        .ctrl-btn.recording { color: #e74c3c; animation: blink 1s infinite; }
+
+        .volume-slider {
+            width: 50px;
+            height: 3px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: #555;
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #3498db;
+            cursor: pointer;
+        }
+
+        /* Fullscreen overlay */
+        .video-box.fullscreen-mode {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 99999 !important;
+            border-radius: 0 !important;
+            border: none !important;
+        }
+        .video-box.fullscreen-mode .video-container-wrapper {
+            height: calc(100vh - 75px) !important;
+        }
+        .video-box.fullscreen-mode video {
+            object-fit: contain;
+        }
+
+        /* Snapshot flash */
+        .snapshot-flash {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #fff;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 10;
+            transition: opacity 0.1s;
+        }
+        .snapshot-flash.flash { opacity: 0.7; }
+
+        /* Status badge (REC) */
+        .status-badge {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            background: #e74c3c;
+            color: #fff;
+            font-size: 8px;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 3px;
+            display: none;
+            z-index: 5;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+        .fx-normal { filter: none; }
+        .fx-bw { filter: grayscale(100%) contrast(120%); }
+        .fx-nv { filter: sepia(100%) hue-rotate(60deg) saturate(400%) brightness(140%) contrast(130%); }
+        .fx-thermal { filter: invert(100%) hue-rotate(180deg) saturate(300%) contrast(140%); }
+
+        #logConsole { font-size: 10px; max-height: 45px; overflow-y: auto; text-align: left; background: #000; padding: 4px; border-radius: 4px; margin-top: 5px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="grid-container" id="gridContainer"></div>
+
+    <h3 style="font-size: 11px; margin: 6px 0 2px 0;">Logs de la Régie</h3>
+    <div id="logConsole"></div>
+</div>
+
+<script>
+const serverIp = '192.168.1.107'; 
+const logConsole = document.getElementById('logConsole');
+const gridContainer = document.getElementById('gridContainer');
+
+let ws = null;
+let peerConnections = {}; 
+let targetsMetaData = {}; 
+
+// extraction et décodage sécurisé des paramètres d'URL (Reçoit ID*Marque*Modèle)
+const urlParams = new URLSearchParams(window.location.search);
+const targetsRaw = urlParams.get('targets');
+if (targetsRaw) {
+    const decodedTargets = decodeURIComponent(targetsRaw);
+    decodedTargets.split(',').forEach(item => {
+        const parts = item.split('*');
+        if (parts.length === 3) {
+            const id = parts[0].trim();
+            // Restauration des espaces à la place des tirets transmis par index.php
+            const brand = parts[1].replace(/-/g, ' ');
+            const model = parts[2].replace(/-/g, ' ');
+            targetsMetaData[id] = { brand: brand, model: model };
+        }
+    });
+}
+
+// Table d'association dynamique : streamerSocketId → targetId
+let streamerToTargetMap = {};
+let unmatchedStreamers = [];
+let availableTargetIds = Object.keys(targetsMetaData);
+
+const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+function log(message) {
+    logConsole.innerHTML += `[${new Date().toLocaleTimeString()}] ${message}<br>`;
+    logConsole.scrollTop = logConsole.scrollHeight;
+}
+
+// Résout les métadonnées pour un streamerId reçu du WebSocket
+function resolveMetaData(streamerId) {
+    // 1. Correspondance directe (l'ID WebSocket = l'ID de la table)
+    if (targetsMetaData[streamerId]) {
+        return targetsMetaData[streamerId];
+    }
+    
+    // 2. Déjà mappé précédemment
+    if (streamerToTargetMap[streamerId] && targetsMetaData[streamerToTargetMap[streamerId]]) {
+        return targetsMetaData[streamerToTargetMap[streamerId]];
+    }
+    
+    // 3. Attribution séquentielle : le premier streamer non mappé prend le premier target disponible
+    if (availableTargetIds.length > 0) {
+        const assignedTargetId = availableTargetIds.shift();
+        streamerToTargetMap[streamerId] = assignedTargetId;
+        log(`📋 Mapping: streamer [${streamerId}] → target [${assignedTargetId}] (${targetsMetaData[assignedTargetId].brand} ${targetsMetaData[assignedTargetId].model})`);
+        return targetsMetaData[assignedTargetId];
+    }
+    
+    // 4. Aucune correspondance trouvée
+    return { brand: 'Appareil', model: streamerId };
+}
+
+function addVideoCanvas(streamerId) {
+    const meta = resolveMetaData(streamerId);
+    const realDeviceId = streamerToTargetMap[streamerId] || streamerId;
+    log(`🏷️ Appareil [${realDeviceId}] identifié comme : ${meta.brand} ${meta.model}`);
+    
+    const box = document.createElement('div');
+    box.className = 'video-box';
+    box.id = `box-${streamerId}`;
+
+    // ── Label ──
+    const label = document.createElement('div');
+    label.className = 'video-label';
+    label.innerHTML = `<span>${meta.brand} ${meta.model}</span> (ID: ${realDeviceId})`;
+    box.appendChild(label);
+
+    // ── Video wrapper ──
+    const wrapper = document.createElement('div');
+    wrapper.className = 'video-container-wrapper';
+    
+    const flash = document.createElement('div');
+    flash.className = 'snapshot-flash';
+    wrapper.appendChild(flash);
+
+    const recBadge = document.createElement('div');
+    recBadge.className = 'status-badge';
+    recBadge.textContent = '⏺ REC';
+    wrapper.appendChild(recBadge);
+
+    const video = document.createElement('video');
+    video.id = `video-${streamerId}`;
+    video.autoplay = true;
+    video.setAttribute('playsinline', '');
+    video.muted = true; 
+    video.controls = false; 
+    wrapper.appendChild(video);
+    box.appendChild(wrapper);
+
+    // ── Row 1 : Camera switch + Effets visuels ──
+    const actions = document.createElement('div');
+    actions.className = 'video-actions';
+    actions.innerHTML = `
+        <button class="action-btn" onclick="switchCamera('${streamerId}', 'STREAMBACK')">📷 Back</button>
+        <button class="action-btn" onclick="switchCamera('${streamerId}', 'STREAMFRONT')">🤳 Front</button>
+        <button class="action-btn" onclick="applyEffect(this, 'fx-normal')">Normal</button>
+        <button class="action-btn" onclick="applyEffect(this, 'fx-bw')">N&B</button>
+        <button class="action-btn" onclick="applyEffect(this, 'fx-nv')">Noct.</button>
+        <button class="action-btn" onclick="applyEffect(this, 'fx-thermal')">Therm.</button>
+    `;
+    box.appendChild(actions);
+
+    // ── Row 2 : Contrôles media (fullscreen, audio, snapshot, record) ──
+    const controls = document.createElement('div');
+    controls.className = 'video-controls';
+    controls.innerHTML = `
+        <button class="ctrl-btn" onclick="toggleFullscreen('${streamerId}')" title="Plein écran">⛶</button>
+        <button class="ctrl-btn" onclick="toggleMute(this, '${streamerId}')" title="Audio On/Off">🔇</button>
+        <input type="range" class="volume-slider" min="0" max="100" value="0" 
+               oninput="setVolume('${streamerId}', this.value)" title="Volume">
+        <button class="ctrl-btn" onclick="takeSnapshot('${streamerId}')" title="Capture écran">📸</button>
+        <button class="ctrl-btn" onclick="toggleRecord(this, '${streamerId}')" title="Enregistrer">⏺</button>
+        <button class="ctrl-btn" onclick="pipMode('${streamerId}')" title="Picture-in-Picture">🖼</button>
+    `;
+    box.appendChild(controls);
+
+    gridContainer.appendChild(box);
+    return video;
+}
+
+window.switchCamera = function(streamerId, cmd) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        log(`Ordre envoyé [${cmd}] → Appareil ${streamerId}`);
+        ws.send(JSON.stringify({
+            type: 'command-forward', 
+            to: streamerId,
+            command: cmd
+        }));
+    }
+};
+
+window.applyEffect = function(buttonElement, effectClass) {
+    const videoBox = buttonElement.closest('.video-box');
+    if (videoBox) {
+        const video = videoBox.querySelector('video');
+        if (video) {
+            video.className = ''; 
+            video.classList.add(effectClass); 
+        }
+    }
+};
+
+// ── FULLSCREEN ──
+window.toggleFullscreen = function(streamerId) {
+    const box = document.getElementById(`box-${streamerId}`);
+    if (!box) return;
+    if (box.classList.contains('fullscreen-mode')) {
+        box.classList.remove('fullscreen-mode');
+        log(`↩️ Sortie plein écran [${streamerId}]`);
+    } else {
+        // Fermer tout autre fullscreen d'abord
+        document.querySelectorAll('.video-box.fullscreen-mode').forEach(b => b.classList.remove('fullscreen-mode'));
+        box.classList.add('fullscreen-mode');
+        log(`⛶ Plein écran [${streamerId}]`);
+    }
+};
+
+// Touche Echap pour quitter le fullscreen
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.video-box.fullscreen-mode').forEach(b => b.classList.remove('fullscreen-mode'));
+    }
+});
+
+// ── MUTE / UNMUTE ──
+window.toggleMute = function(btn, streamerId) {
+    const video = document.getElementById(`video-${streamerId}`);
+    if (!video) return;
+    video.muted = !video.muted;
+    btn.textContent = video.muted ? '🔇' : '🔊';
+    btn.classList.toggle('active', !video.muted);
+    // Synchroniser le slider volume
+    const box = document.getElementById(`box-${streamerId}`);
+    const slider = box ? box.querySelector('.volume-slider') : null;
+    if (slider) {
+        if (!video.muted && video.volume === 0) {
+            video.volume = 0.5;
+            slider.value = 50;
+        }
+    }
+    log(`${video.muted ? '🔇 Mute' : '🔊 Unmute'} [${streamerId}]`);
+};
+
+// ── VOLUME ──
+window.setVolume = function(streamerId, val) {
+    const video = document.getElementById(`video-${streamerId}`);
+    if (!video) return;
+    video.volume = val / 100;
+    if (val > 0 && video.muted) {
+        video.muted = false;
+        const box = document.getElementById(`box-${streamerId}`);
+        const muteBtn = box ? box.querySelector('.ctrl-btn') : null;
+        // Mettre à jour l'icone mute (2e bouton ctrl)
+        const btns = box ? box.querySelectorAll('.ctrl-btn') : [];
+        if (btns[1]) { btns[1].textContent = '🔊'; btns[1].classList.add('active'); }
+    }
+};
+
+// ── SNAPSHOT (capture image du flux) ──
+window.takeSnapshot = function(streamerId) {
+    const video = document.getElementById(`video-${streamerId}`);
+    const box = document.getElementById(`box-${streamerId}`);
+    if (!video || !box) return;
+    
+    // Flash visuel
+    const flash = box.querySelector('.snapshot-flash');
+    if (flash) {
+        flash.classList.add('flash');
+        setTimeout(() => flash.classList.remove('flash'), 200);
+    }
+
+    // Capture canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Téléchargement
+    const link = document.createElement('a');
+    const meta = resolveMetaData(streamerId);
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    link.download = `snapshot_${meta.brand}_${meta.model}_${timestamp}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    
+    log(`📸 Snapshot sauvegardé [${streamerId}]`);
+};
+
+// ── RECORD (enregistrement local du flux) ──
+let activeRecorders = {};
+
+window.toggleRecord = function(btn, streamerId) {
+    const video = document.getElementById(`video-${streamerId}`);
+    const box = document.getElementById(`box-${streamerId}`);
+    if (!video || !box) return;
+    
+    const recBadge = box.querySelector('.status-badge');
+
+    if (activeRecorders[streamerId]) {
+        // Arrêter l'enregistrement
+        activeRecorders[streamerId].stop();
+        delete activeRecorders[streamerId];
+        btn.classList.remove('recording');
+        if (recBadge) recBadge.style.display = 'none';
+        log(`⏹ Enregistrement arrêté [${streamerId}]`);
+    } else {
+        // Démarrer l'enregistrement
+        const stream = video.srcObject;
+        if (!stream) { log(`⚠️ Pas de flux à enregistrer [${streamerId}]`); return; }
+        
+        try {
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus' });
+            const chunks = [];
+            
+            recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const link = document.createElement('a');
+                const meta = resolveMetaData(streamerId);
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                link.download = `record_${meta.brand}_${meta.model}_${timestamp}.webm`;
+                link.href = URL.createObjectURL(blob);
+                link.click();
+                URL.revokeObjectURL(link.href);
+                log(`💾 Vidéo sauvegardée [${streamerId}]`);
+            };
+            
+            recorder.start(1000);
+            activeRecorders[streamerId] = recorder;
+            btn.classList.add('recording');
+            if (recBadge) recBadge.style.display = 'block';
+            log(`⏺ Enregistrement démarré [${streamerId}]`);
+        } catch(e) {
+            log(`⚠️ Erreur enregistrement: ${e.message}`);
+        }
+    }
+};
+
+// ── PICTURE-IN-PICTURE ──
+window.pipMode = function(streamerId) {
+    const video = document.getElementById(`video-${streamerId}`);
+    if (!video) return;
+    if (document.pictureInPictureElement) {
+        document.exitPictureInPicture().catch(() => {});
+    } else {
+        video.requestPictureInPicture().catch(e => log(`⚠️ PiP non supporté: ${e.message}`));
+    }
+};
+
+log("Connexion au serveur de régie...");
+log(`📡 Targets attendus depuis URL: ${JSON.stringify(targetsMetaData)}`);
+ws = new WebSocket(`wss://${serverIp}:8443`);
+
+ws.onopen = () => {
+    log("Régie en ligne. En attente de flux...");
+    ws.send(JSON.stringify({ type: 'register-viewer' }));
+};
+
+// Compteur pour gérer les streamers sans ID (fallback si serveur ne résout pas)
+let offerCounter = 0;
+
+ws.onmessage = async (message) => {
+    const data = JSON.parse(message.data);
+    let streamerId = data.from;
+
+    if (data.type === 'offer') {
+        // Si le serveur n'envoie pas de "from" valide, générer un ID interne unique
+        if (!streamerId || streamerId === 'undefined' || streamerId === 'null') {
+            offerCounter++;
+            streamerId = `stream_${offerCounter}`;
+            log(`⚠️ Offre sans ID → ID interne: [${streamerId}]`);
+        } else {
+            log(`🎥 Offre reçue de l'appareil ID: [${streamerId}]`);
+        }
+        
+        let pc = new RTCPeerConnection(rtcConfig);
+        peerConnections[streamerId] = pc;
+
+        let remoteVideo = addVideoCanvas(streamerId);
+
+        pc.ontrack = (event) => {
+            if (remoteVideo.srcObject !== event.streams[0]) {
+                remoteVideo.srcObject = event.streams[0];
+            }
+        };
+
+        pc.onicecandidate = (event) => {
+            if (event.candidate) {
+                ws.send(JSON.stringify({ type: 'candidate-viewer', to: streamerId, candidate: event.candidate }));
+            }
+        };
+
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        ws.send(JSON.stringify({ type: 'answer', to: streamerId, answer: answer }));
+    } 
+    else if (data.type === 'candidate') {
+        let pc = peerConnections[streamerId];
+        if (pc) {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+    }
+    else if (data.type === 'streamer-left') {
+        log(`❌ Appareil [${streamerId}] déconnecté.`);
+        if (streamerId && peerConnections[streamerId]) {
+            peerConnections[streamerId].close();
+            delete peerConnections[streamerId];
+            const box = document.getElementById(`box-${streamerId}`);
+            if (box) box.remove();
+        }
+    }
+};
+
+ws.onclose = () => log("Connexion régie interrompue.");
+</script>
+</body>
+</html>
