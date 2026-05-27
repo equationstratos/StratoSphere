@@ -1,3 +1,7 @@
+<img width="1366" height="768" alt="Capture d’écran du 2026-05-27 05-34-22" src="https://github.com/user-attachments/assets/4e2de46b-218c-477c-9890-6a405c53a061" />
+
+<img width="1366" height="768" alt="Capture d’écran du 2026-05-27 05-47-27" src="https://github.com/user-attachments/assets/3b32f29e-d763-41dd-8c49-8bc49e2cb52c" />
+
 # STRATOSPHERE — Guide d'installation & d'utilisation
 
 Système de contrôle à distance d'appareils Android via un tableau de bord web.
